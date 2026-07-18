@@ -1,0 +1,19 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
+
+# Web app runtime
+webapp/server.log
+
+# BioDC run artifacts (generated when the tool runs)
+V2.2/SPR/
+*_[0-9][0-9]-[0-9][0-9]-[0-9][0-9][0-9][0-9].txt
+InteractiveInput.txt
+PriorInteractiveInput.txt
+
+# Structures are downloaded from the PDB on demand — never commit them
+V2.2/*.pdb

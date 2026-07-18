@@ -1,0 +1,15 @@
+# Web layer
+fastapi
+uvicorn[standard]
+
+# BioDC science dependencies
+numpy
+pandas
+scikit-learn
+matplotlib
+networkx
+tabulate
+scipy
+
+# Structure fetching / handling
+pdb-tools

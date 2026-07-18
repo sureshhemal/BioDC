@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BioDC — Protein Nanowire Explorer</title>
+<script src="https://unpkg.com/ngl@2.0.0-dev.39/dist/ngl.js"></script>
+<style>
+  :root { --bg:#0f172a; --card:#1e293b; --ink:#e2e8f0; --muted:#94a3b8; --accent:#38bdf8; --line:#334155; }
+  @media (prefers-color-scheme: light){
+    :root { --bg:#f1f5f9; --card:#ffffff; --ink:#0f172a; --muted:#475569; --accent:#0369a1; --line:#cbd5e1; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font:16px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:28px 20px; text-align:center; border-bottom:1px solid var(--line); }
+  h1 { margin:0 0 6px; font-size:1.6rem; }
+  header p { margin:0; color:var(--muted); }
+  main { max-width:1000px; margin:0 auto; padding:20px; display:grid; gap:20px; grid-template-columns:1fr 1fr; }
+  @media (max-width:760px){ main { grid-template-columns:1fr; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px; }
+  .card h2 { margin:0 0 14px; font-size:1.15rem; }
+  label { display:block; margin:12px 0 4px; font-weight:600; }
+  .hint { color:var(--muted); font-weight:400; font-size:.85rem; }
+  input, select { width:100%; padding:9px 10px; border-radius:8px; border:1px solid var(--line); background:var(--bg); color:var(--ink); font-size:1rem; }
+  button { margin-top:18px; width:100%; padding:12px; font-size:1.05rem; font-weight:700; color:#02121f; background:var(--accent); border:none; border-radius:9px; cursor:pointer; }
+  button.secondary { margin-top:0; width:auto; padding:9px 14px; background:#475569; color:#fff; font-size:.95rem; }
+  button:disabled { opacity:.6; cursor:progress; }
+  #viewer { width:100%; height:300px; border-radius:10px; background:#000; border:1px solid var(--line); }
+  table { width:100%; border-collapse:collapse; margin-top:12px; }
+  th,td { text-align:left; padding:7px 10px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-size:.85rem; }
+  .big { font-size:1.9rem; font-weight:800; color:var(--accent); }
+  .status { color:var(--muted); min-height:1.3em; margin:4px 0 0; }
+  .explain { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px 20px; max-width:1000px; margin:0 auto 4px; color:var(--muted); }
+  .row { display:flex; gap:8px; align-items:stretch; }
+  code { background:rgba(148,163,184,.18); padding:1px 5px; border-radius:4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🧬 Protein Nanowire Explorer</h1>
+  <p>A friendly front-end for BioDC — no terminal, no setup, no cryptic prompts.</p>
+</header>
+
+<p class="explain">
+  Some bacteria carry electricity through chains of <strong>heme</strong> groups — tiny iron centers that
+  pass electrons like stepping stones. Pick a structure, and this tool shows it in 3D, finds its hemes,
+  and measures <strong>how well electrons flow</strong> through it.
+</p>
+
+<main>
+  <!-- LEFT: choose structure + settings -->
+  <section class="card" aria-labelledby="form-h">
+    <h2 id="form-h">1. Choose a structure</h2>
+    <form id="form">
+      <label for="pdbid">Structure (PDB ID)</label>
+      <div class="row">
+        <input id="pdbid" name="pdbid" type="text" value="6NEF" aria-label="PDB ID" style="flex:1" required>
+        <button id="showbtn" type="button" class="secondary">Show</button>
+      </div>
+      <p class="hint" style="margin:6px 0 0">
+        Multi-heme wires (best): <code>6NEF</code> <code>6EF8</code> <code>7LQ5</code> <code>7TFS</code> <code>8D9M</code>
+      </p>
+
+      <label for="seq">Heme pattern
+        <span class="hint">(one letter per heme: S = strong, T = weak)</span></label>
+      <input id="seq" name="seq" type="text" value="STSTST" required>
+
+      <label for="seqids">Heme residue numbers
+        <span class="hint">(press Find and the software detects them)</span></label>
+      <div class="row">
+        <input id="seqids" name="seqids" type="text" value="501,502,503,504,505,506" required style="flex:1">
+        <button id="findbtn" type="button" class="secondary">🔍 Find</button>
+      </div>
+      <p id="findstatus" class="status" role="status" aria-live="polite"></p>
+
+      <label for="num_sets">Scenarios to try <span class="hint">(more = slower, more thorough)</span></label>
+      <input id="num_sets" name="num_sets" type="number" value="2000" min="100" max="20000" step="100" required>
+
+      <button id="runbtn" type="submit">Run calculation ▶</button>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </form>
+  </section>
+
+  <!-- RIGHT: 3D viewer -->
+  <section class="card" aria-labelledby="view-h">
+    <h2 id="view-h">The molecule</h2>
+    <!-- The WebGL canvas is purely visual and cannot be read by a screen reader,
+         so it is hidden from assistive tech. The text description below (#viewdesc,
+         a live region) conveys what is shown; all data is in the form and results. -->
+    <div id="viewer" aria-hidden="true"></div>
+    <p id="viewdesc" class="hint" role="status" aria-live="polite" style="margin:6px 0 0">
+      3D view — decorative; the structure details are in the form and results.
+    </p>
+    <div class="row" style="margin-top:8px; flex-wrap:wrap; gap:6px">
+      <button type="button" class="secondary" id="zoomin" aria-label="Zoom in">＋</button>
+      <button type="button" class="secondary" id="zoomout" aria-label="Zoom out">－</button>
+      <button type="button" class="secondary" id="resetview">⟲ Reset</button>
+      <button type="button" class="secondary" id="spin">↻ Spin</button>
+      <button type="button" class="secondary" id="png">⬇ PNG</button>
+      <button type="button" class="secondary" id="full">⛶ Full</button>
+    </div>
+    <p class="hint" style="margin:6px 0 0">Tip: drag to rotate, scroll to zoom.</p>
+    <p id="viewstatus" class="status" role="status" aria-live="polite"></p>
+  </section>
+
+  <!-- RESULT -->
+  <section class="card" aria-labelledby="res-h" style="grid-column:1/-1">
+    <h2 id="res-h">2. Result</h2>
+    <p>Structure: <strong id="rpdb">—</strong> · Average heme spacing: <strong><span id="spacing">—</span> Å</strong></p>
+    <p>Best electron diffusion coefficient (higher = better wire):</p>
+    <p class="big" id="bestD">—</p>
+    <div aria-live="polite">
+      <table id="restable" hidden>
+        <thead><tr><th scope="col">Rank</th><th scope="col">Diffusion coefficient D (cm²/s)</th></tr></thead>
+        <tbody id="resbody"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script>
+  let stage;
+  const $ = id => document.getElementById(id);
+  const vstatus = () => $("viewstatus");
+
+  function renderStructure(pdbid) {
+    const label = pdbid.toUpperCase();
+    vstatus().textContent = "Loading " + label + "…";
+    stage.removeAllComponents();
+    return stage.loadFile("/api/structure?pdbid=" + encodeURIComponent(pdbid), { ext: "pdb" })
+      .then(c => {
+        c.addRepresentation("cartoon", { color: "chainid" });
+        c.addRepresentation("ball+stick", { sele: "hetero and not water" }); // show hemes/ligands
+        c.autoView();
+        vstatus().textContent = "Showing " + label + ".";
+        $("viewdesc").textContent = "3D view — showing structure " + label +
+          " (visual only; the structure's details are in the form and results).";
+      })
+      .catch(() => { vstatus().textContent = "Could not load " + label + " (check the ID / internet)."; });
+  }
+
+  window.addEventListener("load", () => {
+    try {
+      stage = new NGL.Stage("viewer", { backgroundColor: "black" });
+      renderStructure($("pdbid").value.trim() || "6NEF");
+      window.addEventListener("resize", () => stage.handleResize());
+    } catch (e) { $("viewer").textContent = "(3D viewer unavailable)"; }
+  });
+
+  // Show the chosen structure in the viewer
+  $("showbtn").addEventListener("click", () => renderStructure($("pdbid").value.trim() || "6NEF"));
+  $("pdbid").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); $("showbtn").click(); } });
+
+  // Viewer controls
+  let spinning = false;
+  $("zoomin").addEventListener("click", () => { if (stage) stage.viewerControls.zoom(0.3); });
+  $("zoomout").addEventListener("click", () => { if (stage) stage.viewerControls.zoom(-0.3); });
+  $("resetview").addEventListener("click", () => { if (stage) stage.autoView(400); });
+  $("spin").addEventListener("click", () => {
+    if (!stage) return;
+    spinning = !spinning;
+    try { stage.setSpin(spinning ? [0, 1, 0] : null, spinning ? 0.008 : null); } catch (e) { spinning = false; }
+    $("spin").textContent = spinning ? "⏸ Stop" : "↻ Spin";
+  });
+  $("full").addEventListener("click", () => { if (stage) stage.toggleFullscreen($("viewer")); });
+  $("png").addEventListener("click", () => {
+    if (!stage) return;
+    vstatus().textContent = "Saving image…";
+    stage.makeImage({ factor: 2, antialias: true, trim: false, transparent: false }).then(blob => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = (($("pdbid").value.trim() || "structure").toUpperCase()) + ".png";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      vstatus().textContent = "Image saved.";
+    }).catch(() => { vstatus().textContent = "Could not save image."; });
+  });
+
+  // Find hemes in the CHOSEN structure and auto-fill the numbers + a matching pattern
+  $("findbtn").addEventListener("click", async () => {
+    const id = $("pdbid").value.trim() || "6NEF";
+    const fs = $("findstatus");
+    fs.textContent = "Scanning " + id.toUpperCase() + " for hemes…";
+    try {
+      const r = await fetch("/api/hemes?pdbid=" + encodeURIComponent(id));
+      const data = await r.json();
+      if (!data.ok) { fs.textContent = "No hemes found in " + id.toUpperCase() + "."; return; }
+      $("seqids").value = data.seqids;
+      // Only (re)generate a pattern if the current one doesn't match the heme count;
+      // otherwise keep whatever the user typed (e.g. SSSSSS).
+      const cur = $("seq").value.trim().toUpperCase();
+      let note = "";
+      if (cur.length !== data.count) {
+        let seq = "";
+        for (let i = 0; i < data.count; i++) seq += (i % 2 === 0 ? "S" : "T");
+        $("seq").value = seq;
+        note = ` — pattern set to ${seq} (${data.count} hemes)`;
+      }
+      fs.textContent = `Found ${data.count} ${data.resname} hemes: ${data.seqids}${note}`;
+    } catch (e) { fs.textContent = "Could not scan the structure."; }
+  });
+
+  // Run the calculation on the CHOSEN structure
+  const form = $("form");
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = $("runbtn");
+    btn.disabled = true;
+    $("status").textContent = "Running the calculation… (a few seconds)";
+    const body = {
+      pdbid: $("pdbid").value.trim() || "6NEF",
+      seq: $("seq").value.trim().toUpperCase(),
+      seqids: $("seqids").value.trim(),
+      num_sets: Number($("num_sets").value),
+    };
+    try {
+      const r = await fetch("/api/compute", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+      const data = await r.json();
+      if (!data.ok) { $("status").textContent = data.error || "The calculation could not complete."; btn.disabled = false; return; }
+      $("rpdb").textContent = data.pdbid;
+      $("spacing").textContent = data.spacing_angstrom;
+      $("bestD").textContent = data.best_D.toExponential(2) + " cm²/s";
+      const tbody = $("resbody");
+      tbody.innerHTML = "";
+      data.results.forEach(row => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${row.rank}</td><td>${row.D.toExponential(2)}</td>`;
+        tbody.appendChild(tr);
+      });
+      $("restable").hidden = false;
+      $("status").textContent = "Done. Best result shown above.";
+    } catch (err) { $("status").textContent = "Something went wrong talking to the server."; }
+    btn.disabled = false;
+  });
+</script>
+</body>
+</html>
