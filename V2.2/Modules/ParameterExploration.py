@@ -121,13 +121,14 @@ def parse_arguments(args):
         # Handle boolean values
         if value.lower() in ['true', 'false']:
             params[key] = value
-        # Handle scientific notation and float values
-        elif 'E' in value.upper() or 'e' in value:
-            params[key] = float(value)
-        elif value.replace('.','').isdigit():
-            params[key] = float(value)
         else:
-            params[key] = value
+            # Try to parse as a number (handles ints, floats, and scientific
+            # notation like 1E6). Anything that is not a valid number -- filenames
+            # such as 6NEF.pdb, sequences, comma-lists -- is kept as a string.
+            try:
+                params[key] = float(value)
+            except ValueError:
+                params[key] = value
     return params
 
 def format_row_data(row):
